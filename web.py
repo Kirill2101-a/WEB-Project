@@ -1,5 +1,4 @@
-# Серверная часть (Flask)
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for
 import csv
 from gigachat import GigaChat
 from langchain_core.messages import HumanMessage
@@ -9,10 +8,10 @@ app = Flask(__name__)
 app.secret_key = 'secret'
 
 
-class work:
+class Work:
     def __init__(self):
         self.giga = GigaChat(
-            credentials="YWFiNjI4YzUtYWU3ZC00YjM2LTg2ZjgtODU0ZDg5Yjg2MmMyOmJjOTM3NzMzLTVjODYtNDNhOC04MzQwLTM2OWM3MDA4NGE3NA==",
+            credentials="YWFiNjI4YzUtYWU3ZC00YjM2LTg2ZjgtODU0ZDg5Yjg2MmMyOmQ1YTZlZDI2LTVhYzktNGRhMi1iOGJkLTg1ZmZlYWJmY2JjZQ==",
             scope="GIGACHAT_API_PERS",
             model="GigaChat",
             verify_ssl_certs=False
@@ -23,26 +22,29 @@ class work:
         return response.content
 
 
-class HistoryManager:
+class History:
     def __init__(self):
         self.h_file = 'history.csv'
 
-    def add_record(self, prompt, response):
-        with open(self.h_file, 'a', newline='') as f:
-            write = csv.writer(f)
-            write.writerow([prompt, response])
+    def add_history(self, prompt, response):
+        with open(self.h_file, 'a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([prompt, response])
 
     def get_history(self):
         story = []
-        with open(self.h_file, 'r') as f:
-            reader = csv.reader(f)
-            for i in reader:
-                story.append({'prompt': i[0], 'response': i[1]})
+        try:
+            with open(self.h_file, 'r', encoding='utf-8') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    story.append({'prompt': row[0], 'response': row[1]})
+        except FileNotFoundError:
+            pass  # Если файл истории не существует, просто возвращаем пустой список
         return story
 
 
-generator = work()
-manager = HistoryManager()
+generator = Work()
+manager = History()
 
 
 @app.route('/')
@@ -52,20 +54,31 @@ def index():
 
 @app.route('/generate', methods=['POST'])
 def generate():
-    prompt = request.json.get('prompt')
+    prompt = request.form.get('prompt')
     if not prompt:
-        return jsonify({'error': 'Пустой запрос'}), 400
+        return render_template('index.html', error="Пустой запрос")
 
-    sp = generator.generate(prompt)
-    manager.add_record(prompt, sp)
+    response = generator.generate(prompt)
+    manager.add_history(prompt, response)
 
-    return jsonify({'response': sp})
+    return render_template('index.html', output=response)
 
 
 @app.route('/history')
 def show_history():
-    ss = manager.get_history()
-    return render_template('history.html', history=ss)
+    history = manager.get_history()
+    return render_template('history.html', history=history)
+
+
+@app.route('/conditions')
+def show_conditions():
+    return render_template('conditions.html')
+
+
+@app.route('/accept_conditions', methods=['POST'])
+def accept_conditions():
+    return redirect(url_for('index'))
+
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)
