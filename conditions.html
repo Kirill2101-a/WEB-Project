@@ -13,7 +13,8 @@
                     <div class="list-group-item">1. Запрещено создавать вредоносный контент.</div>
                     <div class="list-group-item">2. Максимальная длина запроса - 500 символов.</div>
                 </div>
-                <form action="/accept_conditions" method="POST">
+                <form action="/conditions" method="GET">
+                    <input type="hidden" name="accept" value="1">
                     <button type="submit" class="btn btn-primary">Принимаю</button>
                 </form>
             </div>
