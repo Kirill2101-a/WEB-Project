@@ -21,6 +21,9 @@
                 <a href="/history"><button type="button">История</button></a>
             </div>
         </form>
+        {% if not conditions_accepted %}
+            <p style="color: red;">Примите условия генерации!</p>
+        {% endif %}
 
         {% if error %}
         <p style="color: red;">{{ error }}</p>
