@@ -6,7 +6,7 @@ from langchain_community.chat_models.gigachat import GigaChat
 
 app = Flask(__name__)
 app.secret_key = 'secret'
-
+conditions_accepted = False
 
 class Work:
     def __init__(self):
@@ -46,6 +46,10 @@ class History:
 generator = Work()
 manager = History()
 
+@app.context_processor
+def inject_conditions():
+    return dict(conditions_accepted=conditions_accepted)
+
 
 @app.route('/')
 def index():
@@ -54,13 +58,16 @@ def index():
 
 @app.route('/generate', methods=['POST'])
 def generate():
+    global conditions_accepted
+    if not conditions_accepted:
+        return render_template('index.html', error="Примите условия генерации")
+
     prompt = request.form.get('prompt')
     if not prompt:
         return render_template('index.html', error="Пустой запрос")
 
     response = generator.generate(prompt)
     manager.add_history(prompt, response)
-
     return render_template('index.html', output=response)
 
 
@@ -72,12 +79,11 @@ def show_history():
 
 @app.route('/conditions')
 def show_conditions():
+    global conditions_accepted
+    if request.args.get('accept') == '1':
+        conditions_accepted = True
+        return redirect(url_for('index'))
     return render_template('conditions.html')
-
-
-@app.route('/accept_conditions', methods=['POST'])
-def accept_conditions():
-    return redirect(url_for('index'))
 
 
 if __name__ == '__main__':
