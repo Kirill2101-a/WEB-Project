@@ -86,5 +86,31 @@ def show_conditions():
     return render_template('conditions.html')
 
 
+@app.route('/premium', methods=['GET', 'POST'])
+def premium():
+    global conditions_accepted
+    if not conditions_accepted:
+        return render_template('premium.html', error="Примите условия генерации")
+
+    if request.method == 'POST':
+        prompt = request.form.get('prompt')
+        if not prompt:
+            return render_template('premium.html', error="Пустой запрос")
+
+        responses = [
+            generator.generate(prompt + " Очень подробно, подумай хорошо"),
+            generator.generate(prompt + " Без ошибок, но кратко"),
+            generator.generate(prompt + " Просто, но правильно")
+        ]
+
+        for i in responses:
+            manager.add_history(prompt, i)
+
+        return render_template('premium.html', responses=responses, prompt=prompt)
+
+    return render_template('premium.html')
+
+
+
 if __name__ == '__main__':
     app.run(debug=True)
