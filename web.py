@@ -3,6 +3,7 @@ import csv
 from gigachat import GigaChat
 from langchain_core.messages import HumanMessage
 from langchain_community.chat_models.gigachat import GigaChat
+import sqlite3
 
 app = Flask(__name__)
 app.secret_key = 'secret'
@@ -24,23 +25,30 @@ class Work:
 
 class History:
     def __init__(self):
-        self.h_file = 'history.csv'
+        pass
 
-    def add_history(self, prompt, response):
-        with open(self.h_file, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow([prompt, response])
+    def get_connection(self):
+        return sqlite3.connect("project.sqlite")
+
+    def add_history(self, prompt, response): #НЕ РАБОТАЕТ НАДО ПОЧИНИТЬ
+        con = self.get_connection()
+        cur = con.cursor()
+        cur.execute(
+            "INSERT INTO result(input, output, length, tag) VALUES (?, ?, ?, 0)",
+            (prompt, response, len(response))
+        )
+        con.commit()
+        cur.close()
+        con.close()
 
     def get_history(self):
-        story = []
-        try:
-            with open(self.h_file, 'r', encoding='utf-8') as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    story.append({'prompt': row[0], 'response': row[1]})
-        except FileNotFoundError:
-            pass  # Если файл истории не существует, просто возвращаем пустой список
-        return story
+        con = self.get_connection()
+        cur = con.cursor()
+        rows = cur.execute("SELECT * FROM result").fetchall()
+        cur.close()
+        con.close()
+        print(rows)
+        return [{'prompt': row[1], 'response': row[2]} for row in rows]
 
 
 generator = Work()
@@ -67,13 +75,16 @@ def generate():
         return render_template('index.html', error="Пустой запрос")
 
     response = generator.generate(prompt)
+    print(response)
     manager.add_history(prompt, response)
+    print(1)
     return render_template('index.html', output=response)
 
 
 @app.route('/history')
 def show_history():
     history = manager.get_history()
+    print(history)
     return render_template('history.html', history=history)
 
 
