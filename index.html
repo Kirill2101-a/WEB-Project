@@ -21,6 +21,13 @@
                 <a href="/history"><button type="button">История</button></a>
                 <a href="/premium"><button type="button">Премиум</button></a>
             </div>
+            <div style="float: right;">
+                {% if user %}
+                    Привет, {{ user }}! <a href="/logout">Выйти</a>
+                {% else %}
+                    <a href="/login">Войти</a> | <a href="/register">Регистрация</a>
+                {% endif %}
+            </div>
         </form>
         {% if not conditions_accepted %}
             <p style="color: red;">Примите условия генерации!</p>
