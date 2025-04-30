@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GigaChat</title>
+    <style>
+        .container { width: 600px; margin: 20px auto; }
+        textarea { width: 100%; height: 200px; margin: 10px 0; }
+        button { padding: 8px 15px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Генератор текста</h2>
+
+        <form action="/generate" method="POST">
+            <textarea id="output" readonly placeholder="Результат...">{{ output }}</textarea>
+            <input type="text" name="prompt" id="input" placeholder="Ваш запрос" style="width:100%" value="{{ request.form['prompt'] or '' }}">
+            <div>
+                <button type="submit">Сгенерировать</button>
+                <a href="/conditions"><button type="button">Условия</button></a>
+                <a href="/history"><button type="button">История</button></a>
+                <a href="/premium"><button type="button">Премиум</button></a>
+            </div>
+            <div style="float: right;">
+                {% if user %}
+                    Привет, {{ user }}! <a href="/logout">Выйти</a>
+                {% else %}
+                    <a href="/login">Войти</a> | <a href="/register">Регистрация</a>
+                {% endif %}
+            </div>
+        </form>
+        {% if not conditions_accepted %}
+            <p style="color: red;">Примите условия генерации!</p>
+        {% endif %}
+
+        {% if error %}
+        <p style="color: red;">{{ error }}</p>
+        {% endif %}
+    </div>
+</body>
+</html>
