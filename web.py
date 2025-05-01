@@ -26,27 +26,21 @@ class Work:
 
 
 class History:
-    def __init__(self):
-        pass
-
-
-    def add_history(self, prompt, response):
+    def add_history(self, prompt, response, user_id):
         con = sqlite3.connect("project.sqlite")
         cur = con.cursor()
         cur.execute(
-            "INSERT INTO result(input, output, lenght, tag) VALUES (?, ?, ?, 0)",
-            (prompt, response, len(response))
+            "INSERT INTO result(input, output, lenght, tag, user_id) VALUES (?, ?, ?, 0, ?)",
+            (prompt, response, len(response), user_id)
         )
         con.commit()
 
-
-    def get_history(self):
+    def get_history(self, user_id):
         con = sqlite3.connect("project.sqlite")
         cur = con.cursor()
-        rows = cur.execute("SELECT * FROM result").fetchall()
+        rows = cur.execute("SELECT * FROM result WHERE user_id = ?", (user_id,)).fetchall()
         cur.close()
         con.close()
-        print(rows)
         return [{'prompt': row[1], 'response': row[2]} for row in rows]
 
 
@@ -72,6 +66,11 @@ def inject_user():
 def generate():
     if 'user' not in session:
         return redirect(url_for('login'))
+    con = sqlite3.connect("project.sqlite")
+    cur = con.cursor()
+    user_id = cur.execute("SELECT id FROM users WHERE login = ?", (session['user'],)).fetchone()[0]
+    con.close()
+
     global conditions_accepted
     if not conditions_accepted:
         return render_template('index.html', error="Примите условия генерации")
@@ -81,13 +80,22 @@ def generate():
         return render_template('index.html', error="Пустой запрос")
 
     response = generator.generate(prompt)
-    manager.add_history(prompt, response)
+    manager.add_history(prompt, response, user_id)
     return render_template('index.html', output=response)
 
 
 @app.route('/history')
 def show_history():
-    history = manager.get_history()
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    # Получаем user_id
+    con = sqlite3.connect("project.sqlite")
+    cur = con.cursor()
+    user_id = cur.execute("SELECT id FROM users WHERE login = ?", (session['user'],)).fetchone()[0]
+    con.close()
+
+    history = manager.get_history(user_id)  # Фильтрация по user_id
     return render_template('history.html', history=history)
 
 
@@ -102,6 +110,12 @@ def show_conditions():
 
 @app.route('/premium', methods=['GET', 'POST'])
 def premium():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    con = sqlite3.connect("project.sqlite")
+    cur = con.cursor()
+    user_id = cur.execute("SELECT id FROM users WHERE login = ?", (session['user'],)).fetchone()[0]
+    con.close()
     global conditions_accepted
     if not conditions_accepted:
         return render_template('premium.html', error="Примите условия генерации")
@@ -117,11 +131,10 @@ def premium():
             generator.generate(prompt + " Просто, но правильно")
         ]
 
-        for i in responses:
-            manager.add_history(prompt, i)
+        session['premium_responses'] = responses
+        session['premium_prompt'] = prompt
 
         return render_template('premium.html', responses=responses, prompt=prompt)
-
     return render_template('premium.html')
 
 
@@ -145,9 +158,11 @@ def register():
             return render_template('register.html', error="Пароль должен быть не короче 8 символов")
 
         code1 = bin(len(password))
+        code2 = bin(len(login))
+        code3 = hashlib.md5(login.encode()).digest()
         pasw1 = hashlib.md5(password.encode()).digest()
         pasw2 = hashlib.md5(pasw1).hexdigest()
-        hash = f"{code1}{pasw2}"
+        hash = f"{code1}{code2}{code3}{pasw2}"
 
         cur.execute(
             "INSERT INTO users (login, password, name) VALUES (?, ?, ?)",
@@ -160,6 +175,36 @@ def register():
         return redirect(url_for('index'))
 
     return render_template('register.html')
+
+
+@app.route('/premium/save', methods=['POST'])
+def save_premium_response():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    ind = request.form.get('selected_response')
+    prompt = request.form.get('prompt')
+
+    if not ind:
+        return render_template('premium.html', error="Выберите ответ для сохранения")
+    ngx = int(ind)
+
+
+    responses = session.get('premium_responses')
+    if not responses or not prompt:
+        return render_template('premium.html', error="Сессия устарела")
+
+    con = sqlite3.connect("project.sqlite")
+    cur = con.cursor()
+    user_id = cur.execute("SELECT id FROM users WHERE login = ?", (session['user'],)).fetchone()[0]
+    con.close()
+
+    manager.add_history(prompt, responses[ngx], user_id)
+
+    session.pop('premium_responses', None)
+    session.pop('premium_prompt', None)
+
+    return redirect(url_for('premium'))
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -176,11 +221,12 @@ def login():
         if not user:
             return render_template('login.html', error="Логин не найден")
 
-
         code1 = bin(len(password))
+        code2 = bin(len(login))
+        code3 = hashlib.md5(login.encode()).digest()
         pasw1 = hashlib.md5(password.encode()).digest()
         pasw2 = hashlib.md5(pasw1).hexdigest()
-        hash = f"{code1}{pasw2}"
+        hash = f"{code1}{code2}{code3}{pasw2}"
 
         if user[2] != hash:
             return render_template('login.html', error="Неверный пароль")
