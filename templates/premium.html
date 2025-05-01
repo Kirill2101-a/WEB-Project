@@ -26,18 +26,25 @@
         {% if responses %}
         <div>
             <h3>Результаты:</h3>
-            <div class="response-box">
-                <h4>Вариант 1:</h4>
-                <textarea readonly>{{ responses[0] }}</textarea>
-            </div>
-            <div class="response-box">
-                <h4>Вариант 2:</h4>
-                <textarea readonly>{{ responses[1] }}</textarea>
-            </div>
-            <div class="response-box">
-                <h4>Вариант 3:</h4>
-                <textarea readonly>{{ responses[2] }}</textarea>
-            </div>
+            <form action="/premium/save" method="POST">
+                <div class="response-box">
+                    <h4>Вариант 1:</h4>
+                    <textarea readonly>{{ responses[0] }}</textarea>
+                    <input type="radio" name="selected_response" value="0" required>
+                </div>
+                <div class="response-box">
+                    <h4>Вариант 2:</h4>
+                    <textarea readonly>{{ responses[1] }}</textarea>
+                    <input type="radio" name="selected_response" value="1">
+                </div>
+                <div class="response-box">
+                    <h4>Вариант 3:</h4>
+                    <textarea readonly>{{ responses[2] }}</textarea>
+                    <input type="radio" name="selected_response" value="2">
+                </div>
+                <input type="hidden" name="prompt" value="{{ prompt }}">
+                <button type="submit">Сохранить выбранный ответ</button>
+            </form>
         </div>
         {% endif %}
         {% if error %}
