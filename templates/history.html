@@ -11,6 +11,16 @@
     <h1>История запросов</h1>
     <a href="/">На главную</a>
 
+    <form method="GET" action="/history">
+        <input type="text" name="search" placeholder="Поиск..." value="{{ request.args.get('search', '') }}">
+        <select name="search_type">
+            <option value="both" {% if request.args.get('search_type') == 'both' %}selected{% endif %}>Все</option>
+            <option value="prompt" {% if request.args.get('search_type') == 'prompt' %}selected{% endif %}>По запросу</option>
+            <option value="response" {% if request.args.get('search_type') == 'response' %}selected{% endif %}>По ответу</option>
+        </select>
+        <button type="submit">Искать</button>
+    </form>
+
     <table>
         <tr>
             <th>Запрос</th>
