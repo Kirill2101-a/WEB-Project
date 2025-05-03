@@ -35,11 +35,26 @@ class History:
         )
         con.commit()
 
-    def get_history(self, user_id):
+    def get_history(self, user_id, search_query=None, search_type='both'):
         con = sqlite3.connect("project.sqlite")
         cur = con.cursor()
-        rows = cur.execute("SELECT * FROM result WHERE user_id = ?", (user_id,)).fetchall()
-        cur.close()
+
+        query = "SELECT * FROM result WHERE user_id = ?"
+        params = [user_id]
+
+        if search_query:
+            search_term = f"%{search_query}%"
+            if search_type == 'prompt':
+                query += " AND input LIKE ?"
+                params.append(search_term)
+            elif search_type == 'response':
+                query += " AND output LIKE ?"
+                params.append(search_term)
+            else:
+                query += " AND (input LIKE ? OR output LIKE ?)"
+                params.extend([search_term, search_term])
+
+        rows = cur.execute(query, tuple(params)).fetchall()
         con.close()
         return [{'prompt': row[1], 'response': row[2]} for row in rows]
 
@@ -89,14 +104,21 @@ def show_history():
     if 'user' not in session:
         return redirect(url_for('login'))
 
-    # Получаем user_id
     con = sqlite3.connect("project.sqlite")
     cur = con.cursor()
     user_id = cur.execute("SELECT id FROM users WHERE login = ?", (session['user'],)).fetchone()[0]
     con.close()
 
-    history = manager.get_history(user_id)  # Фильтрация по user_id
-    return render_template('history.html', history=history)
+    search_query = request.args.get('search', '')
+    search_type = request.args.get('search_type', 'both')
+
+    history = manager.get_history(user_id=user_id,
+        search_query=search_query,
+        search_type=search_type)
+
+    return render_template('history.html', history=history,
+                           search=search_query,
+                           search_type=search_type)
 
 
 @app.route('/conditions')
