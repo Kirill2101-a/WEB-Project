@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Профиль</title>
+    <style>
+        table { width: 100%; border-collapse: collapse; }
+        td, th { border: 1px solid #ddd; padding: 8px; }
+    </style>
+</head>
+<body>
+    <h1>Редактирование профиля</h1>
+    <form method="POST">
+        <div>
+            <label>Логин:</label>
+            <input type="text" value="{{ user.login }}" disabled>
+        </div>
+        <div>
+            <label>Имя:</label>
+            <input type="text" name="name" value="{{ user.name if user.name }}">
+        </div>
+        <div>
+            <label>Новый пароль:</label>
+            <input type="password" name="password" placeholder="Оставьте пустым, чтобы не менять">
+        </div>
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+        <button type="submit">Сохранить</button>
+    </form>
+    <a href="{{ url_for('index') }}">На главную</a>
+</body>
+</html>
