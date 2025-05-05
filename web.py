@@ -1,15 +1,33 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session
 from gigachat import GigaChat
 from langchain_core.messages import HumanMessage
 from langchain_community.chat_models.gigachat import GigaChat
-import sqlite3
-from flask import session
+from flask_sqlalchemy import SQLAlchemy
 import hashlib
-
 
 app = Flask(__name__)
 app.secret_key = 'secret'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///project.sqlite'
+db = SQLAlchemy(app)
 conditions_accepted = False
+
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    login = db.Column(db.Text, unique=True, nullable=False)
+    password = db.Column(db.Text, nullable=False)
+    name = db.Column(db.Text)
+    results = db.relationship('Result', backref='user', lazy=True)
+
+
+class Result(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    input = db.Column(db.Text, nullable=False)
+    output = db.Column(db.Text, nullable=False)
+    lenght = db.Column(db.Integer)
+    tag = db.Column(db.Integer, default=0)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
 
 class Work:
     def __init__(self):
@@ -27,40 +45,37 @@ class Work:
 
 class History:
     def add_history(self, prompt, response, user_id):
-        con = sqlite3.connect("project.sqlite")
-        cur = con.cursor()
-        cur.execute(
-            "INSERT INTO result(input, output, lenght, tag, user_id) VALUES (?, ?, ?, 0, ?)",
-            (prompt, response, len(response), user_id)
+        result = Result(
+            input=prompt,
+            output=response,
+            lenght=len(response),
+            user_id=user_id
         )
-        con.commit()
+        db.session.add(result)
+        db.session.commit()
 
     def get_history(self, user_id, search_query=None, search_type='both'):
-        con = sqlite3.connect("project.sqlite")
-        cur = con.cursor()
-
-        query = "SELECT * FROM result WHERE user_id = ?"
-        params = [user_id]
+        query = Result.query.filter_by(user_id=user_id)
 
         if search_query:
             search_term = f"%{search_query}%"
             if search_type == 'prompt':
-                query += " AND input LIKE ?"
-                params.append(search_term)
+                query = query.filter(Result.input.like(search_term))
             elif search_type == 'response':
-                query += " AND output LIKE ?"
-                params.append(search_term)
+                query = query.filter(Result.output.like(search_term))
             else:
-                query += " AND (input LIKE ? OR output LIKE ?)"
-                params.extend([search_term, search_term])
+                query = query.filter(db.or_(
+                    Result.input.like(search_term),
+                    Result.output.like(search_term)
+                ))
 
-        rows = cur.execute(query, tuple(params)).fetchall()
-        con.close()
-        return [{'prompt': row[1], 'response': row[2]} for row in rows]
+        results = query.all()
+        return [{'prompt': res.input, 'response': res.output} for res in results]
 
 
 generator = Work()
 manager = History()
+
 
 @app.context_processor
 def inject_conditions():
@@ -81,10 +96,6 @@ def inject_user():
 def generate():
     if 'user' not in session:
         return redirect(url_for('login'))
-    con = sqlite3.connect("project.sqlite")
-    cur = con.cursor()
-    user_id = cur.execute("SELECT id FROM users WHERE login = ?", (session['user'],)).fetchone()[0]
-    con.close()
 
     global conditions_accepted
     if not conditions_accepted:
@@ -94,9 +105,16 @@ def generate():
     if not prompt:
         return render_template('index.html', error="Пустой запрос")
 
-    response = generator.generate(prompt)
-    manager.add_history(prompt, response, user_id)
-    return render_template('index.html', output=response)
+    try:
+        user = User.query.filter_by(login=session['user']).first()
+        if not user:
+            return redirect(url_for('login'))
+
+        response = generator.generate(prompt)
+        manager.add_history(prompt, response, user.id)
+        return render_template('index.html', output=response)
+    except Exception as e:
+        return render_template('index.html', error=f"Ошибка генерации: {str(e)}")
 
 
 @app.route('/history')
@@ -104,21 +122,28 @@ def show_history():
     if 'user' not in session:
         return redirect(url_for('login'))
 
-    con = sqlite3.connect("project.sqlite")
-    cur = con.cursor()
-    user_id = cur.execute("SELECT id FROM users WHERE login = ?", (session['user'],)).fetchone()[0]
-    con.close()
+    try:
+        user = User.query.filter_by(login=session['user']).first()
+        if not user:
+            return redirect(url_for('login'))
 
-    search_query = request.args.get('search', '')
-    search_type = request.args.get('search_type', 'both')
+        search_query = request.args.get('search', '')
+        search_type = request.args.get('search_type', 'both')
 
-    history = manager.get_history(user_id=user_id,
-        search_query=search_query,
-        search_type=search_type)
+        history = manager.get_history(
+            user_id=user.id,
+            search_query=search_query,
+            search_type=search_type
+        )
 
-    return render_template('history.html', history=history,
-                           search=search_query,
-                           search_type=search_type)
+        return render_template(
+            'history.html',
+            history=history,
+            search=search_query,
+            search_type=search_type
+        )
+    except Exception as e:
+        return render_template('error.html', error=str(e))
 
 
 @app.route('/conditions')
@@ -134,30 +159,34 @@ def show_conditions():
 def premium():
     if 'user' not in session:
         return redirect(url_for('login'))
-    con = sqlite3.connect("project.sqlite")
-    cur = con.cursor()
-    user_id = cur.execute("SELECT id FROM users WHERE login = ?", (session['user'],)).fetchone()[0]
-    con.close()
+
     global conditions_accepted
     if not conditions_accepted:
         return render_template('premium.html', error="Примите условия генерации")
 
-    if request.method == 'POST':
-        prompt = request.form.get('prompt')
-        if not prompt:
-            return render_template('premium.html', error="Пустой запрос")
+    try:
+        user = User.query.filter_by(login=session['user']).first()
+        if not user:
+            return redirect(url_for('login'))
 
-        responses = [
-            generator.generate(prompt + " Очень подробно, подумай хорошо"),
-            generator.generate(prompt + " Без ошибок, но кратко"),
-            generator.generate(prompt + " Просто, но правильно")
-        ]
+        if request.method == 'POST':
+            prompt = request.form.get('prompt')
+            if not prompt:
+                return render_template('premium.html', error="Пустой запрос")
 
-        session['premium_responses'] = responses
-        session['premium_prompt'] = prompt
+            responses = [
+                generator.generate(prompt + " Очень подробно, подумай хорошо"),
+                generator.generate(prompt + " Без ошибок, но кратко"),
+                generator.generate(prompt + " Просто, но правильно")
+            ]
 
-        return render_template('premium.html', responses=responses, prompt=prompt)
-    return render_template('premium.html')
+            session['premium_responses'] = responses
+            session['premium_prompt'] = prompt
+
+            return render_template('premium.html', responses=responses, prompt=prompt)
+        return render_template('premium.html')
+    except Exception as e:
+        return render_template('error.html', error=str(e))
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -167,34 +196,30 @@ def register():
         password = request.form.get('password')
         name = request.form.get('name')
 
-        con = sqlite3.connect("project.sqlite")
-        cur = con.cursor()
+        try:
+            existing_user = User.query.filter_by(login=login).first()
+            if existing_user:
+                return render_template('register.html', error="Логин уже занят")
 
+            if len(password) < 8:
+                return render_template('register.html', error="Пароль должен быть не короче 8 символов")
 
-        existing_user = cur.execute("SELECT * FROM users WHERE login = ?", (login,)).fetchone()
-        if existing_user:
-            con.close()
-            return render_template('register.html', error="Логин уже занят")
+            code1 = bin(len(password))
+            code2 = bin(len(login))
+            code3 = hashlib.md5(login.encode()).digest()
+            pasw1 = hashlib.md5(password.encode()).digest()
+            pasw2 = hashlib.md5(pasw1).hexdigest()
+            hash = f"{code1}{code2}{code3}{pasw2}"
 
-        if len(password) < 8:
-            return render_template('register.html', error="Пароль должен быть не короче 8 символов")
+            new_user = User(login=login, password=hash, name=name)
+            db.session.add(new_user)
+            db.session.commit()
 
-        code1 = bin(len(password))
-        code2 = bin(len(login))
-        code3 = hashlib.md5(login.encode()).digest()
-        pasw1 = hashlib.md5(password.encode()).digest()
-        pasw2 = hashlib.md5(pasw1).hexdigest()
-        hash = f"{code1}{code2}{code3}{pasw2}"
-
-        cur.execute(
-            "INSERT INTO users (login, password, name) VALUES (?, ?, ?)",
-            (login, hash, name)
-        )
-        con.commit()
-        con.close()
-
-        session['user'] = login
-        return redirect(url_for('index'))
+            session['user'] = login
+            return redirect(url_for('index'))
+        except Exception as e:
+            db.session.rollback()
+            return render_template('register.html', error=f"Ошибка регистрации: {str(e)}")
 
     return render_template('register.html')
 
@@ -204,29 +229,31 @@ def save_premium_response():
     if 'user' not in session:
         return redirect(url_for('login'))
 
-    ind = request.form.get('selected_response')
-    prompt = request.form.get('prompt')
+    try:
+        ind = request.form.get('selected_response')
+        prompt = request.form.get('prompt')
 
-    if not ind:
-        return render_template('premium.html', error="Выберите ответ для сохранения")
-    ngx = int(ind)
+        if not ind:
+            return render_template('premium.html', error="Выберите ответ для сохранения")
 
+        ngx = int(ind)
+        responses = session.get('premium_responses')
 
-    responses = session.get('premium_responses')
-    if not responses or not prompt:
-        return render_template('premium.html', error="Сессия устарела")
+        if not responses or not prompt:
+            return render_template('premium.html', error="Сессия устарела")
 
-    con = sqlite3.connect("project.sqlite")
-    cur = con.cursor()
-    user_id = cur.execute("SELECT id FROM users WHERE login = ?", (session['user'],)).fetchone()[0]
-    con.close()
+        user = User.query.filter_by(login=session['user']).first()
+        if not user:
+            return redirect(url_for('login'))
 
-    manager.add_history(prompt, responses[ngx], user_id)
+        manager.add_history(prompt, responses[ngx], user.id)
 
-    session.pop('premium_responses', None)
-    session.pop('premium_prompt', None)
+        session.pop('premium_responses', None)
+        session.pop('premium_prompt', None)
 
-    return redirect(url_for('premium'))
+        return redirect(url_for('premium'))
+    except Exception as e:
+        return render_template('error.html', error=str(e))
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -235,26 +262,26 @@ def login():
         login = request.form.get('login')
         password = request.form.get('password')
 
-        con = sqlite3.connect("project.sqlite")
-        cur = con.cursor()
-        user = cur.execute("SELECT * FROM users WHERE login = ?", (login,)).fetchone()
-        con.close()
+        try:
+            user = User.query.filter_by(login=login).first()
 
-        if not user:
-            return render_template('login.html', error="Логин не найден")
+            if not user:
+                return render_template('login.html', error="Логин не найден")
 
-        code1 = bin(len(password))
-        code2 = bin(len(login))
-        code3 = hashlib.md5(login.encode()).digest()
-        pasw1 = hashlib.md5(password.encode()).digest()
-        pasw2 = hashlib.md5(pasw1).hexdigest()
-        hash = f"{code1}{code2}{code3}{pasw2}"
+            code1 = bin(len(password))
+            code2 = bin(len(login))
+            code3 = hashlib.md5(login.encode()).digest()
+            pasw1 = hashlib.md5(password.encode()).digest()
+            pasw2 = hashlib.md5(pasw1).hexdigest()
+            hash = f"{code1}{code2}{code3}{pasw2}"
 
-        if user[2] != hash:
-            return render_template('login.html', error="Неверный пароль")
+            if user.password != hash:
+                return render_template('login.html', error="Неверный пароль")
 
-        session['user'] = login
-        return redirect(url_for('index'))
+            session['user'] = login
+            return redirect(url_for('index'))
+        except Exception as e:
+            return render_template('login.html', error=f"Ошибка входа: {str(e)}")
 
     return render_template('login.html')
 
@@ -265,5 +292,44 @@ def logout():
     return redirect(url_for('index'))
 
 
+@app.route('/profile', methods=['GET', 'POST'])
+def profile():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    user = User.query.filter_by(login=session['user']).first()
+    if not user:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        try:
+            new_name = request.form.get('name')
+            new_password = request.form.get('password')
+
+            if new_name:
+                user.name = new_name
+
+            if new_password:
+                if len(new_password) < 8:
+                    return render_template('profile.html', user=user, error="Пароль должен быть не короче 8 символов")
+
+                code1 = bin(len(new_password))
+                code2 = bin(len(user.login))
+                code3 = hashlib.md5(user.login.encode()).digest()
+                pasw1 = hashlib.md5(new_password.encode()).digest()
+                pasw2 = hashlib.md5(pasw1).hexdigest()
+                user.password = f"{code1}{code2}{code3}{pasw2}"
+
+            db.session.commit()
+            return redirect(url_for('profile'))
+        except Exception as e:
+            db.session.rollback()
+            return render_template('profile.html', user=user, error=f"Ошибка обновления: {str(e)}")
+
+    return render_template('profile.html', user=user)
+
+
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)
