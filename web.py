@@ -2,32 +2,20 @@ from flask import Flask, render_template, request, redirect, url_for, session
 from gigachat import GigaChat
 from langchain_core.messages import HumanMessage
 from langchain_community.chat_models.gigachat import GigaChat
-from flask_sqlalchemy import SQLAlchemy
+from database import db
+from all_models import User, Result
 import hashlib
 
 app = Flask(__name__)
 app.secret_key = 'secret'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///project.sqlite'
-db = SQLAlchemy(app)
+
+db.init_app(app)
+
+with app.app_context():
+    db.create_all()
+
 conditions_accepted = False
-
-
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    login = db.Column(db.Text, unique=True, nullable=False)
-    password = db.Column(db.Text, nullable=False)
-    name = db.Column(db.Text)
-    results = db.relationship('Result', backref='user', lazy=True)
-
-
-class Result(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    input = db.Column(db.Text, nullable=False)
-    output = db.Column(db.Text, nullable=False)
-    lenght = db.Column(db.Integer)
-    tag = db.Column(db.Integer, default=0)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-
 
 class Work:
     def __init__(self):
