@@ -1,37 +1,29 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>История запросов</title>
-    <style>
-        table { width: 100%; border-collapse: collapse; }
-        td, th { border: 1px solid #ddd; padding: 8px; }
-    </style>
-</head>
-<body>
-    <h1>История запросов</h1>
-    <a href="/">На главную</a>
+{% extends "base.html" %}
+{% block content %}
+    <div class="card shadow">
+        <div class="card-body">
+            <form method="GET" action="/history">
+                <input type="text" name="search" class="form-control mb-2" placeholder="Поиск..." value="{{ request.args.get('search', '') }}">
+                <select name="search_type" class="form-select mb-2">
+                    <option value="both" {% if request.args.get('search_type') == 'both' %}selected{% endif %}>Все</option>
+                    <option value="prompt" {% if request.args.get('search_type') == 'prompt' %}selected{% endif %}>По запросу</option>
+                    <option value="response" {% if request.args.get('search_type') == 'response' %}selected{% endif %}>По ответу</option>
+                </select>
+                <button type="submit" class="btn btn-primary">Искать</button>
+            </form>
 
-    <form method="GET" action="/history">
-        <input type="text" name="search" placeholder="Поиск..." value="{{ request.args.get('search', '') }}">
-        <select name="search_type">
-            <option value="both" {% if request.args.get('search_type') == 'both' %}selected{% endif %}>Все</option>
-            <option value="prompt" {% if request.args.get('search_type') == 'prompt' %}selected{% endif %}>По запросу</option>
-            <option value="response" {% if request.args.get('search_type') == 'response' %}selected{% endif %}>По ответу</option>
-        </select>
-        <button type="submit">Искать</button>
-    </form>
-
-    <table>
-        <tr>
-            <th>Запрос</th>
-            <th>Ответ</th>
-        </tr>
-        {% for i in history %}
-        <tr>
-            <td>{{ i.prompt }}</td>
-            <td>{{ i.response }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-</body>
-</html>
+            <table class="table table-bordered">
+                <tr class="table-primary">
+                    <th>Запрос</th>
+                    <th>Ответ</th>
+                </tr>
+                {% for i in history %}
+                <tr>
+                    <td>{{ i.prompt }}</td>
+                    <td>{{ i.response }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+{% endblock %}
