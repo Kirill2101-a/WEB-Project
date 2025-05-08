@@ -9,13 +9,12 @@ import hashlib
 app = Flask(__name__)
 app.secret_key = 'secret'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///project.sqlite'
+conditions_accepted = False
 
 db.init_app(app)
-
 with app.app_context():
     db.create_all()
 
-conditions_accepted = False
 
 class Work:
     def __init__(self):
@@ -100,7 +99,7 @@ def generate():
 
         response = generator.generate(prompt)
         manager.add_history(prompt, response, user.id)
-        return render_template('index.html', output=response)
+        return render_template('index.html', output= response)
     except Exception as e:
         return render_template('index.html', error=f"Ошибка генерации: {str(e)}")
 
@@ -118,7 +117,7 @@ def show_history():
         search_query = request.args.get('search', '')
         search_type = request.args.get('search_type', 'both')
 
-        history = manager.get_history(
+        history= manager.get_history(
             user_id=user.id,
             search_query=search_query,
             search_type=search_type
@@ -131,7 +130,7 @@ def show_history():
             search_type=search_type
         )
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        return render_template('index.html', error=str(e))
 
 
 @app.route('/conditions')
@@ -159,20 +158,35 @@ def premium():
 
         if request.method == 'POST':
             prompt = request.form.get('prompt')
-            if not prompt:
+            file = request.files.get('file')
+
+            file_content = ""
+            if file and file.filename != '':
+                if not file.filename.endswith('.txt'):
+                    return render_template('premium.html', error="Допустимы только .txt файлы")
+                try:
+                    file_content = file.read().decode('utf-8')
+                except Exception as e:
+                    return render_template('premium.html', error=f"Ошибка чтения файла: {str(e)}")
+
+            full_prompt = f"{prompt}\nКонтекст из файла:\n{file_content}" if file_content else prompt
+
+            if not full_prompt.strip():
                 return render_template('premium.html', error="Пустой запрос")
 
             responses = [
-                generator.generate(prompt + " Очень подробно, подумай хорошо"),
-                generator.generate(prompt + " Без ошибок, но кратко"),
-                generator.generate(prompt + " Просто, но правильно")
+                generator.generate(full_prompt + " Очень подробно, подумай хорошо"),
+                generator.generate(full_prompt + " Без ошибок, но кратко"),
+                generator.generate(full_prompt + " Просто, но правильно")
             ]
 
             session['premium_responses'] = responses
-            session['premium_prompt'] = prompt
+            session['premium_prompt'] = full_prompt
 
-            return render_template('premium.html', responses=responses, prompt=prompt)
-        return render_template('premium.html')
+            return render_template('premium.html', responses=responses,
+                                   prompt=prompt,
+                                   show_ad=True)
+        return render_template('premium.html', show_ad=False)
     except Exception as e:
         return render_template('error.html', error=str(e))
 
