@@ -18,6 +18,17 @@
             <a href="/conditions"><button type="button">Условия</button></a>
             <a href="/"><button type="button">На главную</button></a>
         </form>
+        <form method="POST" enctype="multipart/form-data">
+            <input type="text" name="prompt" placeholder="Введите запрос" required>
+            <input type="file" name="file" accept=".txt">
+            <button type="submit">Сгенерировать</button>
+        </form>
+        {% if show_ad %}
+        <div class="advertisement" style="margin: 20px; padding: 15px; border: 1px solid #ddd;">
+            <h3>Реклама</h3>
+            <p>Здесь могла быть ваша реклама</p>
+        </div>
+        {% endif %}
 
         {% if error %}
         <p style="color: red;">{{ error }}</p>
