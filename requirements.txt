@@ -1,0 +1,6 @@
+flask
+flask-sqlalchemy
+gigachat
+langchain-core
+langchain-community
+langchain-gigachat
