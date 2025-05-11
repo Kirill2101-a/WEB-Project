@@ -15,8 +15,10 @@ db.init_app(app)
 with app.app_context():
     db.create_all()
 
+best_response = [0, 0, 0]
 
-class Work:
+
+class Work: # Основной класс для работы по API
     def __init__(self):
         self.giga = GigaChat(
             credentials="YWFiNjI4YzUtYWU3ZC00YjM2LTg2ZjgtODU0ZDg5Yjg2MmMyOjMxYTY4ZGM5LWQ5YTktNDU3NS05MzQzLTAyZjAzOWZjZjlhMg==",
@@ -30,7 +32,7 @@ class Work:
         return response.content
 
 
-class History:
+class History: # Класс для работы с историей запросов
     def add_history(self, prompt, response, user_id):
         result = Result(
             input=prompt,
@@ -44,7 +46,7 @@ class History:
     def get_history(self, user_id, search_query=None, search_type='both'):
         query = Result.query.filter_by(user_id=user_id)
 
-        if search_query:
+        if search_query: # Нужна ли сортировка 
             search_term = f"%{search_query}%"
             if search_type == 'prompt':
                 query = query.filter(Result.input.like(search_term))
@@ -70,7 +72,7 @@ def inject_conditions():
 
 
 @app.route('/')
-def index():
+def index(): # Главная страница
     return render_template('index.html')
 
 
@@ -80,11 +82,12 @@ def inject_user():
 
 
 @app.route('/generate', methods=['POST'])
-def generate():
+def generate(): # Функция генерации в гланом окне
     if 'user' not in session:
         return redirect(url_for('login'))
 
     global conditions_accepted
+    global best_response
     if not conditions_accepted:
         return render_template('index.html', error="Примите условия генерации")
 
@@ -96,16 +99,25 @@ def generate():
         user = User.query.filter_by(login=session['user']).first()
         if not user:
             return redirect(url_for('login'))
+        max_best_response = max(best_response)
+        if max_best_response == 0:
+            full_prompt = f"{prompt}"
+        elif max_best_response == best_response[0]:
+            full_prompt = f"{prompt} Очень подробно, подумай хорошо"
+        elif max_best_response == best_response[1]:
+            full_prompt = f"{prompt} Без ошибок, но кратко"
+        elif max_best_response == best_response[2]:
+            full_prompt = f"{prompt} Просто, но правильно"
 
-        response = generator.generate(prompt)
+        response = generator.generate(full_prompt)
         manager.add_history(prompt, response, user.id)
-        return render_template('index.html', output= response)
+        return render_template('index.html', output=response)
     except Exception as e:
         return render_template('index.html', error=f"Ошибка генерации: {str(e)}")
 
 
 @app.route('/history')
-def show_history():
+def show_history(): # Вкладка отображения истории запросов
     if 'user' not in session:
         return redirect(url_for('login'))
 
@@ -114,10 +126,10 @@ def show_history():
         if not user:
             return redirect(url_for('login'))
 
-        search_query = request.args.get('search', '')
+        search_query = request.args.get('search', '') # Параметры для поиска если необхдим поиск
         search_type = request.args.get('search_type', 'both')
 
-        history= manager.get_history(
+        history = manager.get_history(
             user_id=user.id,
             search_query=search_query,
             search_type=search_type
@@ -134,7 +146,7 @@ def show_history():
 
 
 @app.route('/conditions')
-def show_conditions():
+def show_conditions(): 
     global conditions_accepted
     if request.args.get('accept') == '1':
         conditions_accepted = True
@@ -206,14 +218,14 @@ def register():
             if len(password) < 8:
                 return render_template('register.html', error="Пароль должен быть не короче 8 символов")
 
-            code1 = bin(len(password))
+            code1 = bin(len(password))#тут происходит шифрование пароля
             code2 = bin(len(login))
             code3 = hashlib.md5(login.encode()).digest()
             pasw1 = hashlib.md5(password.encode()).digest()
             pasw2 = hashlib.md5(pasw1).hexdigest()
             hash = f"{code1}{code2}{code3}{pasw2}"
 
-            new_user = User(login=login, password=hash, name=name)
+            new_user = User(login=login, password=hash, name=name) #Запись в БД
             db.session.add(new_user)
             db.session.commit()
 
@@ -227,7 +239,8 @@ def register():
 
 
 @app.route('/premium/save', methods=['POST'])
-def save_premium_response():
+def save_premium_response(): # Сохранение одного из 3х ответов в вкладке премиум
+    global best_response
     if 'user' not in session:
         return redirect(url_for('login'))
 
@@ -239,6 +252,7 @@ def save_premium_response():
             return render_template('premium.html', error="Выберите ответ для сохранения")
 
         ngx = int(ind)
+        best_response[ngx] += 1
         responses = session.get('premium_responses')
 
         if not responses or not prompt:
@@ -270,14 +284,14 @@ def login():
             if not user:
                 return render_template('login.html', error="Логин не найден")
 
-            code1 = bin(len(password))
+            code1 = bin(len(password)) # Опять кодирование пароля
             code2 = bin(len(login))
             code3 = hashlib.md5(login.encode()).digest()
             pasw1 = hashlib.md5(password.encode()).digest()
             pasw2 = hashlib.md5(pasw1).hexdigest()
             hash = f"{code1}{code2}{code3}{pasw2}"
 
-            if user.password != hash:
+            if user.password != hash: # Проверка совпадения пароля
                 return render_template('login.html', error="Неверный пароль")
 
             session['user'] = login
@@ -320,7 +334,7 @@ def profile():
                 code3 = hashlib.md5(user.login.encode()).digest()
                 pasw1 = hashlib.md5(new_password.encode()).digest()
                 pasw2 = hashlib.md5(pasw1).hexdigest()
-                user.password = f"{code1}{code2}{code3}{pasw2}"
+                user.password = f"{code1}{code2}{code3}{pasw2}" # Изменение пароля в вкладке профиль
 
             db.session.commit()
             return redirect(url_for('profile'))
