@@ -19,7 +19,7 @@ with app.app_context():
 class Work:
     def __init__(self):
         self.giga = GigaChat(
-            credentials="YWFiNjI4YzUtYWU3ZC00YjM2LTg2ZjgtODU0ZDg5Yjg2MmMyOmQ1YTZlZDI2LTVhYzktNGRhMi1iOGJkLTg1ZmZlYWJmY2JjZQ==",
+            credentials="YWFiNjI4YzUtYWU3ZC00YjM2LTg2ZjgtODU0ZDg5Yjg2MmMyOjMxYTY4ZGM5LWQ5YTktNDU3NS05MzQzLTAyZjAzOWZjZjlhMg==",
             scope="GIGACHAT_API_PERS",
             model="GigaChat",
             verify_ssl_certs=False
@@ -175,9 +175,9 @@ def premium():
                 return render_template('premium.html', error="Пустой запрос")
 
             responses = [
-                generator.generate(full_prompt + " Очень подробно, подумай хорошо"),
-                generator.generate(full_prompt + " Без ошибок, но кратко"),
-                generator.generate(full_prompt + " Просто, но правильно")
+                generator.generate(f"{full_prompt} Очень подробно, подумай хорошо"),
+                generator.generate(f"{full_prompt}  Без ошибок, но кратко"),
+                generator.generate(f"{full_prompt}  Просто, но правильно")
             ]
 
             session['premium_responses'] = responses
@@ -188,7 +188,7 @@ def premium():
                                    show_ad=True)
         return render_template('premium.html', show_ad=False)
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        return render_template('index.html', error=str(e))
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -255,7 +255,7 @@ def save_premium_response():
 
         return redirect(url_for('premium'))
     except Exception as e:
-        return render_template('error.html', error=str(e))
+        return render_template('premium.html', error=str(e))
 
 
 @app.route('/login', methods=['GET', 'POST'])
